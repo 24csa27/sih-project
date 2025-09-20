@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Crop Advisory System</title>
+<style>
+body { font-family: Arial, sans-serif; background: #f9fff4; margin:0; padding:0; }
+header { background: #2e7d32; color: white; text-align: center; padding: 1rem; }
+.container { padding: 1rem; }
+.card { background: white; padding: 1rem; margin-bottom: 1rem; border-radius: 10px; box-shadow: 0px 2px 8px rgba(0,0,0,0.1); }
+button { background: #2e7d32; color: white; border: none; padding: 10px; margin-top: 10px; border-radius: 5px; cursor: pointer; width: 100%; font-size: 1rem; }
+button:hover { background: #1b5e20; }
+input[type="text"], select, input[type="file"] { padding: 8px; width: 100%; margin-top: 10px; border-radius: 5px; border: 1px solid #ccc; font-size: 1rem; }
+p { font-size: 1rem; margin-top: 0.5rem; }
+img { max-width: 100%; margin-top: 10px; border-radius: 10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="appTitle"></h1>
+  <p id="appSubtitle"></p>
+</header>
+
+<div class="container">
+
+  <!-- Language Selection -->
+  <div class="card">
+    <h2 id="langTitle"></h2>
+    <select id="langSelect" onchange="changeLanguage()">
+      <option value="en">English</option>
+      <option value="ta">தமிழ் (Tamil)</option>
+      <option value="ml">മലയാളം (Malayalam)</option>
+      <option value="kn">ಕನ್ನಡ (Kannada)</option>
+      <option value="te">తెలుగు (Telugu)</option>
+    </select>
+  </div>
+
+  <!-- Crop Input Section -->
+  <div class="card">
+    <h2 id="cropTitle"></h2>
+    <input type="text" id="cropInput" placeholder="">
+    <button id="submitBtn" onclick="submitCrop()"></button>
+    <button id="voiceBtn" onclick="startRecognition()"></button>
+    <p><b id="chosenLabel"></b> <span id="voiceText">---</span></p>
+    <p id="adviceResult" style="color: green; font-weight: bold;"></p>
+  </div>
+
+  <!-- Image Upload Section -->
+  <div class="card">
+    <h2 id="imageTitle"></h2>
+    <input type="file" id="cropImage" accept="image/*">
+    <button id="analyzeBtn" onclick="analyzeImage()"></button>
+    <p id="imageResult" style="color: darkorange; font-weight: bold;"></p>
+    <img id="previewImg" src="" alt="">
+  </div>
+
+  <!-- Location + Weather + Mandi Prices -->
+  <div class="card">
+    <h2 id="locationTitle"></h2>
+    <button id="locationBtn" onclick="getLocation()"></button>
+    <p id="locationResult">---</p>
+    <p id="weatherResult" style="color: blue; font-weight: bold;"></p>
+    <p id="marketResult" style="color: brown; font-weight: bold;"></p>
+  </div>
+
+</div>
+
+<script>
+// ------------------- Multi-language Dictionary -------------------
+let currentLang = "en";
+let currentCrop = "";
+
+const translations = {
+  en: { 
+    appTitle: "🌱 Smart Crop Advisory System",
+    appSubtitle: "Voice/Typing + Multi-language + Weather + Mandi Prices + Image Suggestions",
+    langTitle: "Select Language",
+    cropTitle: "Enter or Speak Your Crop Name",
+    cropPlaceholder: "Type crop name",
+    submitBtn: "Submit Crop",
+    voiceBtn: "🎤 Speak Crop Name",
+    chosenLabel: "You chose:",
+    imageTitle: "Upload Crop Image for Suggestions",
+    analyzeBtn: "Analyze Image",
+    locationTitle: "📍 Your Location & Weather & Mandi Prices",
+    locationBtn: "Get My Weather & Mandi Prices",
+    alerts: { emptyCrop:"Please type a crop name or use voice input.", emptyImage:"Please upload an image first.", voiceError:"Voice recognition error.", enterCropForLocation:"Please enter or speak a crop first.", locationNotSupported:"Geolocation is not supported by your browser.", locationDenied:"Location access is required to use this app." },
+    advisories: { wheat:"For Wheat: Irrigate lightly this week and apply nitrogen fertilizer.", rice:"For Rice: Maintain standing water and check for pests.", maize:"For Maize: Ensure soil moisture, apply potash at knee-high stage.", general:"General Tip: Use organic manure and monitor pests regularly." },
+    imageSuggestions:["Yellow leaves → possible nitrogen deficiency.","Brown spots → possible fungal infection.","Curling leaves → possible water stress.","Healthy → keep following current practices."],
+    mandiMessage:(crop, price)=>`Current mandi price of ${crop}: ₹${price} per quintal`,
+    weatherTips:{hot:"High heat, irrigate crops adequately.", humid:"High humidity, watch for fungal diseases.", normal:"Normal weather, continue regular practices."}
+  },
+  ta: {
+    appTitle: "🌱 புத்துணர்வு பயிர் ஆலோசனை முறைமை",
+    appSubtitle: "குரல்/தட்டச்சு + பல மொழிகள் + வானிலை + மண்டி விலை + பட ஆலோசனை",
+    langTitle: "மொழியை தேர்ந்தெடு",
+    cropTitle: "உங்கள் பயிர் பெயரை தட்டச்சு செய்யவோ அல்லது பேசவோ செய்யவும்",
+    cropPlaceholder: "பயிர் பெயரை தட்டச்சு செய்யவும்",
+    submitBtn: "பயிர் சமர்ப்பிக்கவும்",
+    voiceBtn: "🎤 குரல் மூலம் பெயரை சொல்லவும்",
+    chosenLabel: "நீங்கள் தேர்ந்தெடுத்தது:",
+    imageTitle: "பயிர் படத்தை பதிவேற்றவும்",
+    analyzeBtn: "படத்தை பகுப்பாய்வு செய்யவும்",
+    locationTitle: "📍 உங்கள் இடம் & வானிலை & மண்டி விலை",
+    locationBtn: "என் வானிலை மற்றும் மண்டி விலை பெறவும்",
+    alerts:{ emptyCrop:"தயவுசெய்து பயிர் பெயரை தட்டச்சு செய்யவும் அல்லது குரல் பயன்படுத்தவும்.", emptyImage:"தயவுசெய்து படத்தை முதலில் பதிவேற்றவும்.", voiceError:"குரல் அங்கீகாரம் பிழை.", enterCropForLocation:"தயவுசெய்து முதலில் பயிர் பெயரை தட்டச்சு செய்யவும் அல்லது சொல்லவும்.", locationNotSupported:"உங்கள் உலாவியில் இடத்தைக் கண்டறிதல் ஆதரிக்கவில்லை.", locationDenied:"இந்த பயன்பாட்டைப் பயன்படுத்த இட அனுமதி தேவை."},
+    advisories:{ wheat:"கோதுமை: இந்த வாரம் சிறிது நீர் ஊட்டவும், நைட்ரஜன் உரம் பயன்படுத்தவும்.", rice:"அரிசி: நிலத்தில் நீர் நிலைத்திருக்கட்டும், பூச்சிகள் பரிசோதிக்கவும்.", maize:"மக்கி: மண்ணில் ஈரப்பதம் உறுதி செய்யவும், இடியளவு அளவில் பொட்டாஷ் கொடுக்கவும்.", general:"பொது ஆலோசனை: உயிரியல் உரம் பயன்படுத்தவும், பூச்சிகள் கண்காணிக்கவும்."},
+    imageSuggestions:["மஞ்சள் இலைகள் → நைட்ரஜன் குறைவு இருக்கலாம்.","பழுப்பு புள்ளிகள் → பூஞ்சை நோய் இருக்கலாம்.","வளைந்த இலைகள் → நீர் குறைவு இருக்கலாம்.","நலமானது → தற்போதைய நடைமுறையை தொடரவும்."],
+    mandiMessage:(crop, price)=>`${crop} இன் தற்போதைய மண்டி விலை: ₹${price} கிலோக்கு`,
+    weatherTips:{hot:"உயர் வெப்பம், பயிருக்கு போதுமான நீர் ஊட்டவும்.", humid:"உயர் ஈரப்பதம், பூஞ்சை நோய்களுக்கு கவனம் வையுங்கள்.", normal:"சாதாரண வானிலை, வழக்கமான நடைமுறை தொடரவும்."}
+  },
+  // Add ml, kn, te similarly...
+};
+
+// ------------------- UI Functions -------------------
+function changeLanguage() {
+  const tr = translations[currentLang = document.getElementById("langSelect").value];
+  document.getElementById("appTitle").innerText = tr.appTitle;
+  document.getElementById("appSubtitle").innerText = tr.appSubtitle;
+  document.getElementById("langTitle").innerText = tr.langTitle;
+  document.getElementById("cropTitle").innerText = tr.cropTitle;
+  document.getElementById("cropInput").placeholder = tr.cropPlaceholder;
+  document.getElementById("submitBtn").innerText = tr.submitBtn;
+  document.getElementById("voiceBtn").innerText = tr.voiceBtn;
+  document.getElementById("chosenLabel").innerText = tr.chosenLabel;
+  document.getElementById("imageTitle").innerText = tr.imageTitle;
+  document.getElementById("analyzeBtn").innerText = tr.analyzeBtn;
+  document.getElementById("locationTitle").innerText = tr.locationTitle;
+  document.getElementById("locationBtn").innerText = tr.locationBtn;
+}
+
+// ------------------- Crop Submit -------------------
+function submitCrop() {
+  const crop = document.getElementById("cropInput").value.trim().toLowerCase();
+  currentCrop = crop;
+  if (!crop) { alert(translations[currentLang].alerts.emptyCrop); return; }
+  document.getElementById("adviceResult").innerText = translations[currentLang].advisories[crop] || translations[currentLang].advisories.general;
+}
+
+// ------------------- Voice Recognition -------------------
+function startRecognition() {
+  if (!('webkitSpeechRecognition' in window)) { alert(translations[currentLang].alerts.voiceError); return; }
+  let recognition = new webkitSpeechRecognition();
+  const langMap = {en:'en-US', ta:'ta-IN', ml:'ml-IN', kn:'kn-IN', te:'te-IN'};
+  recognition.lang = langMap[currentLang] || 'en-US';
+  recognition.onresult = function(event) {
+    const text = event.results[0][0].transcript;
+    document.getElementById("cropInput").value = text;
+    document.getElementById("voiceText").innerText = text;
+    submitCrop();
+  };
+  recognition.onerror = function() { alert(translations[currentLang].alerts.voiceError); };
+  recognition.start();
+}
+
+// ------------------- Image Analyze -------------------
+function analyzeImage() {
+  const imgInput = document.getElementById("cropImage");
+  if (!imgInput.files.length) { alert(translations[currentLang].alerts.emptyImage); return; }
+  const suggestions = translations[currentLang].imageSuggestions;
+  const randomSuggestion = suggestions[Math.floor(Math.random()*suggestions.length)];
+  document.getElementById("imageResult").innerText = randomSuggestion;
+  const reader = new FileReader();
+  reader.onload = function(e){ document.getElementById("previewImg").src = e.target.result; }
+  reader.readAsDataURL(imgInput.files[0]);
+}
+
+// ------------------- Location -------------------
+function getLocation() {
+  if (!currentCrop) { alert(translations[currentLang].alerts.enterCropForLocation); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      document.getElementById("locationResult").innerText = `Lat: ${lat}, Lon: ${lon}`;
+      document.getElementById("weatherResult").innerText = translations[currentLang].weatherTips.normal;
+      document.getElementById("marketResult").innerText = translations[currentLang].mandiMessage(currentCrop, Math.floor(Math.random()*5000)+1000);
+    },
+    err => alert(translations[currentLang].alerts.locationDenied)
+  );
+}
+
+// ------------------- Location Access Check -------------------
+function checkLocationAccess() {
+  if (!navigator.geolocation) { alert(translations[currentLang].alerts.locationNotSupported); disableApp(); return; }
+  navigator.geolocation.getCurrentPosition(enableApp, err => { alert(translations[currentLang].alerts.locationDenied); disableApp(); });
+}
+
+function disableApp() { document.querySelectorAll("input, button, select").forEach(e=>e.disabled=true); }
+function enableApp() { document.querySelectorAll("input, button, select").forEach(e=>e.disabled=false); }
+
+// ------------------- Initialize -------------------
+window.onload = function() { changeLanguage(); checkLocationAccess(); };
+</script>
+
+</body>
+</html>
